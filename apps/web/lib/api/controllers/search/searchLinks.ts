@@ -2,6 +2,10 @@ import { prisma } from "@linkwarden/prisma";
 import { LinkRequestQuery, Order, Sort } from "@linkwarden/types/global";
 import { meiliClient } from "@linkwarden/lib/meilisearchClient";
 import {
+  PG_SEARCH_ENABLED,
+  searchLinksWithPg,
+} from "@linkwarden/lib/pgSearchClient";
+import {
   buildMeiliFilters,
   buildMeiliQuery,
   parseSearchTokens,
@@ -50,6 +54,75 @@ export default async function searchLinks({
 
   const pinnedCondition =
     query.pinnedOnly && userId ? { pinnedBy: { some: { id: userId } } } : {};
+
+  if (PG_SEARCH_ENABLED && query.searchQueryString) {
+    const tokens = parseSearchTokens(query.searchQueryString);
+    const generalTokens = tokens
+      .filter((t) => t.field === "general")
+      .map((t) => t.value);
+    const fieldTokens = tokens.filter((t) => t.field !== "general");
+
+    const sortField =
+      query.sort === Sort.NameAZ || query.sort === Sort.NameZA
+        ? "name"
+        : "id";
+    const sortDirection =
+      query.sort === Sort.DateOldestFirst || query.sort === Sort.NameAZ
+        ? "asc"
+        : "desc";
+
+    const pgResult = await searchLinksWithPg({
+      generalQuery: generalTokens.join(" "),
+      tokens: fieldTokens,
+      userId,
+      publicOnly,
+      collectionId: query.collectionId,
+      tagId: query.tagId,
+      pinnedOnly: query.pinnedOnly,
+      sortField,
+      sortDirection,
+      cursor: query.cursor,
+    });
+
+    if (pgResult.ids.length === 0) {
+      return {
+        data: [],
+        statusCode: 200,
+        success: true,
+        message: "Nothing found.",
+      };
+    }
+
+    const links = await prisma.link.findMany({
+      where: {
+        id: { in: pgResult.ids },
+      },
+      omit: {
+        textContent: true,
+      },
+      include: {
+        tags: true,
+        collection: true,
+        pinnedBy: userId
+          ? {
+              where: { id: userId },
+              select: { id: true },
+            }
+          : undefined,
+      },
+      orderBy: order,
+    });
+
+    return {
+      data: {
+        links,
+        nextCursor: pgResult.nextCursor,
+      },
+      statusCode: 200,
+      success: true,
+      message: "Success",
+    };
+  }
 
   if (meiliClient && query.searchQueryString) {
     const tokens = parseSearchTokens(query.searchQueryString);

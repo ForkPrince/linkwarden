@@ -1,4 +1,5 @@
 import { MEILI_INDEX_VERSION } from "@linkwarden/lib/constants";
+import { PG_SEARCH_ENABLED } from "@linkwarden/lib/pgSearchClient";
 import { prisma } from "@linkwarden/prisma";
 import { WorkerStats } from "@linkwarden/types/global";
 
@@ -33,31 +34,32 @@ export default async function getWorkerStats(userId: number) {
     },
   });
 
-  const searchPending = await prisma.link.count({
-    where: {
-      OR: [
-        { indexVersion: { not: MEILI_INDEX_VERSION } },
-        { indexVersion: null },
-      ],
-    },
-  });
-
-  const searchDone = await prisma.link.count({
-    where: {
-      indexVersion: MEILI_INDEX_VERSION,
-    },
-  });
-
   const data: WorkerStats = {
     link: {
       pending: linkPending,
       done: linkDone,
       failed: linkFailed,
     },
-    search: {
-      pending: searchPending,
-      done: searchDone,
-    },
+    search: PG_SEARCH_ENABLED
+      ? {
+          pending: 0,
+          done: await prisma.link.count(),
+        }
+      : {
+          pending: await prisma.link.count({
+            where: {
+              OR: [
+                { indexVersion: { not: MEILI_INDEX_VERSION } },
+                { indexVersion: null },
+              ],
+            },
+          }),
+          done: await prisma.link.count({
+            where: {
+              indexVersion: MEILI_INDEX_VERSION,
+            },
+          }),
+        },
   };
 
   return {

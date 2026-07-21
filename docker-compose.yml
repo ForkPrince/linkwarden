@@ -17,11 +17,11 @@ services:
       - ./data:/data/data
     depends_on:
       - postgres
-      - meilisearch
-  meilisearch:
-    image: getmeili/meilisearch:v1.12.8
-    restart: always
-    env_file:
-      - .env
-    volumes:
-      - ./meili_data:/meili_data
+  # meilisearch:
+  #   image: getmeili/meilisearch:v1.12.8
+  #   restart: always
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./meili_data:/meili_data
+  #   Uncomment and set SEARCH_PROVIDER=meilisearch in .env to enable
