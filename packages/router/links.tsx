@@ -432,38 +432,22 @@ const useAddLink = ({
       });
       const previousDashboard = queryClient.getQueryData(["dashboardData"]);
 
-      const collections =
-        (queryClient.getQueryData(["collections"]) as any[]) ?? [];
-      const tags = mergeTagsFromQueriesData(
-        queryClient.getQueriesData({
-          queryKey: ["tags"],
-        })
-      );
-      const user = queryClient.getQueryData(["user"]) as any;
+      let resolvedCollection: any = undefined;
+      if (link.collection?.id != null || link.collection?.name) {
+        const collections =
+          (queryClient.getQueryData(["collections"]) as any[]) ?? [];
+        resolvedCollection =
+          link.collection?.id != null
+            ? collections.find((c) => c.id === link.collection?.id)
+            : collections.find((c) => c.name === link.collection?.name);
+      }
 
-      const collectionFromId =
-        link.collection?.id != null
-          ? collections.find(
-              (collection) => collection.id === link.collection?.id
-            )
-          : undefined;
-      const collectionFromName =
-        !collectionFromId && link.collection?.name
-          ? collections.find(
-              (collection) => collection.name === link.collection?.name
-            )
-          : undefined;
-      const resolvedCollection = collectionFromId ?? collectionFromName;
-
-      const tempId = -Date.now();
-      const tempCollectionId = tempId - 1;
-      const collectionId =
-        resolvedCollection?.id ?? link.collection?.id ?? tempCollectionId;
-      const collectionName =
-        resolvedCollection?.name ?? link.collection?.name ?? "Unorganized";
-
-      const resolvedTags =
-        link.tags?.map((tag, index) => {
+      let resolvedTags: any[] = [];
+      if (link.tags?.length) {
+        const tags = mergeTagsFromQueriesData(
+          queryClient.getQueriesData({ queryKey: ["tags"] })
+        );
+        resolvedTags = link.tags.map((tag, index) => {
           if (tag.id != null) {
             return (
               tags.find((existing) => existing.id === tag.id) ?? {
@@ -472,17 +456,23 @@ const useAddLink = ({
               }
             );
           }
-
           const existingTag = tags.find(
             (existing) => existing.name === tag.name
           );
-          return (
-            existingTag ?? {
-              id: tempId - 2 - index,
-              name: tag.name,
-            }
-          );
-        }) ?? [];
+          return existingTag ?? {
+            id: -Date.now() - 2 - index,
+            name: tag.name,
+          };
+        });
+      }
+
+      const user = queryClient.getQueryData(["user"]) as any;
+      const tempId = -Date.now();
+      const tempCollectionId = tempId - 1;
+      const collectionId =
+        resolvedCollection?.id ?? link.collection?.id ?? tempCollectionId;
+      const collectionName =
+        resolvedCollection?.name ?? link.collection?.name ?? "Unorganized";
 
       const optimisticLink = {
         id: tempId,
@@ -504,13 +494,17 @@ const useAddLink = ({
         tags: resolvedTags,
       } as LinkIncludingShortenedCollectionAndTags;
 
-      queryClient.setQueriesData({ queryKey: ["links"] }, (oldData: any) =>
-        upsertLinkInInfiniteData(oldData, optimisticLink, tempId)
-      );
+      if (previousLinks.length) {
+        queryClient.setQueriesData({ queryKey: ["links"] }, (oldData: any) =>
+          upsertLinkInInfiniteData(oldData, optimisticLink, tempId)
+        );
+      }
 
-      queryClient.setQueryData(["dashboardData"], (oldData: any) =>
-        upsertLinkInDashboardData(oldData, optimisticLink, tempId)
-      );
+      if (previousDashboard) {
+        queryClient.setQueryData(["dashboardData"], (oldData: any) =>
+          upsertLinkInDashboardData(oldData, optimisticLink, tempId)
+        );
+      }
 
       return {
         previousLinks,
@@ -540,9 +534,11 @@ const useAddLink = ({
         upsertLinkInInfiniteData(oldData, data, context?.optimisticId)
       );
 
-      queryClient.invalidateQueries({ queryKey: ["dashboardData"] });
+      queryClient.setQueryData(["dashboardData"], (oldData: any) =>
+        upsertLinkInDashboardData(oldData, data, context?.optimisticId)
+      );
+
       queryClient.invalidateQueries({ queryKey: ["collections"] });
-      queryClient.invalidateQueries({ queryKey: ["tags"] });
       queryClient.invalidateQueries({ queryKey: ["publicLinks"] });
     },
   });

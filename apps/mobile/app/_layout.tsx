@@ -79,7 +79,6 @@ export default Sentry.wrap(function RootLayout() {
     hasShareIntent,
     pathname,
     shareIntent?.webUrl,
-    data.shareIntent,
     isLoading,
   ]);
 
@@ -96,7 +95,6 @@ export default Sentry.wrap(function RootLayout() {
       }}
       onSuccess={() => {
         setIsLoading(false);
-        queryClient.invalidateQueries();
       }}
     >
       <RootComponent isLoading={isLoading} />

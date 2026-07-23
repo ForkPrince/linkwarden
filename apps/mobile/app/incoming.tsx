@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -26,8 +26,11 @@ export default function IncomingScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [link, setLink] = useState<LinkIncludingShortenedCollectionAndTags>();
 
+  const submittedRef = useRef(false);
+
   useEffect(() => {
-    if (auth.status === "authenticated" && data.shareIntent.url)
+    if (auth.status === "authenticated" && data.shareIntent.url && !submittedRef.current) {
+      submittedRef.current = true;
       addLink.mutate(
         {
           url: data.shareIntent.url,
@@ -45,7 +48,7 @@ export default function IncomingScreen() {
                 },
               });
               router.replace("/dashboard");
-            }, 1500);
+            }, 600);
           },
           onError: (error) => {
             Alert.alert("Error", "There was an error adding the link.");
@@ -53,7 +56,8 @@ export default function IncomingScreen() {
           },
         }
       );
-  }, [auth, data.shareIntent.url]);
+    }
+  }, [auth.status, data.shareIntent.url]);
 
   if (auth.status === "unauthenticated") return <Redirect href="/" />;
 
