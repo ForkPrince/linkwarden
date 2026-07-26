@@ -23,6 +23,12 @@ jobs:
 
       - name: Swap
         run: |
+          if [ "$(swapon --show | wc -l)" -gt 1 ]; then
+            echo "Swap already active"
+            free -h
+            exit 0
+          fi
+          sudo rm -f /swapfile
           sudo fallocate -l 6G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
