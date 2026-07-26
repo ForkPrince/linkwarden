@@ -73,7 +73,7 @@ jobs:
         run: cd android && ./gradlew assembleRelease
         working-directory: apps/mobile
         env:
-          SENTRY_SKIP_UPLOAD: "true"
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
 
       - name: Sign
         env:
