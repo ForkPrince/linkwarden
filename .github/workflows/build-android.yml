@@ -21,6 +21,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Swap
+        run: |
+          sudo fallocate -l 6G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+      - name: Disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/share/swift
+          df -h /
+
       - name: Node
         uses: actions/setup-node@v4
         with:
@@ -70,10 +83,12 @@ jobs:
         working-directory: apps/mobile
 
       - name: Build
-        run: cd android && ./gradlew assembleRelease
+        run: cd android && ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m -XX:+HeapDumpOnOutOfMemoryError"
         working-directory: apps/mobile
         env:
+          ORG_GRADLE_PROJECT_org.gradle.jvmargs: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
           SENTRY_DISABLE_AUTO_UPLOAD: "true"
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Sign
         env:
@@ -82,10 +97,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "No keystore configured — APK is debug-signed"
-            exit 0
-          fi
           echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
           APK=$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
           if [ -z "$APK" ]; then
