@@ -18,29 +18,30 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Enable Corepack
+      - name: Corepack
         run: corepack enable
 
-      - name: Set up Java 17
+      - name: Java
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Setup Android SDK
+      - name: Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK components
-        run: |
-          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: SDK components
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Cache Gradle
+      - name: Gradle cache
         uses: actions/cache@v4
         with:
           path: |
@@ -50,25 +51,55 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      - name: Install dependencies
+      - name: Dependencies
         run: yarn install --immutable
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
-      - name: Generate Prisma client
+      - name: Prisma
         run: yarn workspace @linkwarden/prisma generate
 
-      - name: Expo prebuild
+      - name: Prebuild
         run: npx expo prebuild --platform android
         working-directory: apps/mobile
         env:
           EXPO_NO_TELEMETRY: "1"
 
-      - name: Build debug APK
-        run: cd android && ./gradlew assembleDebug
+      - name: Configure signing
+        run: python3 ../../.github/scripts/configure_release_signing.py
         working-directory: apps/mobile
 
-      - name: Upload APK to Release
+      - name: Build
+        run: cd android && ./gradlew assembleRelease
+        working-directory: apps/mobile
+
+      - name: Sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No keystore configured — APK is debug-signed"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
+          APK=$(ls android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "No APK found at android/app/build/outputs/apk/release/"
+            exit 1
+          fi
+          $ANDROID_HOME/build-tools/36.0.0/apksigner sign \
+            --ks /tmp/release.keystore \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            "$APK"
+          rm -f /tmp/release.keystore
+        working-directory: apps/mobile
+
+      - name: Release
         uses: marvinpinto/action-automatic-releases@919008cf3f741b179569b7a6fb4d8860689ab7f0 # v1.2.1
         with:
           title: "${{ github.event.repository.name }}"
@@ -76,4 +107,4 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
           files: |
-            apps/mobile/android/app/build/outputs/apk/debug/*.apk
+            apps/mobile/android/app/build/outputs/apk/release/*.apk
