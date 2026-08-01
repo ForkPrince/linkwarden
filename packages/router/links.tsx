@@ -20,8 +20,14 @@ import {
 } from "@linkwarden/lib/schemaValidation";
 import getFormatFromContentType from "@linkwarden/lib/getFormatFromContentType";
 import getLinkTypeFromFormat from "@linkwarden/lib/getLinkTypeFromFormat";
+import {
+  anyPreservationPending,
+  isPreservationPending,
+} from "@linkwarden/lib/formatStats";
 import type toaster from "react-hot-toast";
 import { TFunction } from "next-i18next";
+
+export const PRESERVATION_POLL_INTERVAL = 5000;
 
 const useLinks = (params: LinkRequestQuery = {}, auth?: MobileAuth) => {
   const sort =
@@ -100,6 +106,11 @@ const useFetchLinks = (params: string, auth?: MobileAuth) => {
     refetchOnWindowFocus: false,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: status === "authenticated",
+    refetchInterval: (query) => {
+      const links =
+        query.state.data?.pages?.flatMap((p) => p?.links ?? []) ?? [];
+      return anyPreservationPending(links) ? PRESERVATION_POLL_INTERVAL : false;
+    },
   });
 };
 
@@ -827,6 +838,10 @@ const useGetLink = ({
       queryKey: ["link", id, isPublicRoute],
       placeholderData: {} as LinkIncludingShortenedCollectionAndTags,
       enabled: id != null && enabled,
+      refetchInterval: (query) =>
+        isPreservationPending(query.state.data)
+          ? PRESERVATION_POLL_INTERVAL
+          : false,
       queryFn: async () => {
         const base = auth?.instance ?? "";
         const route = isPublicRoute
@@ -1002,7 +1017,17 @@ const useUploadFile = () => {
   });
 };
 
-const useUpdateFile = () => {
+const useUpdateFile = ({
+  auth,
+  Alert,
+  toast,
+  t,
+}: {
+  auth?: MobileAuth;
+  Alert?: any;
+  toast?: typeof toaster;
+  t?: TFunction;
+} = {}) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -1012,7 +1037,7 @@ const useUpdateFile = () => {
       isPreview,
     }: {
       linkId: number;
-      file: File;
+      file: File | { uri: string; name: string; type: string };
       isPreview?: boolean;
     }) => {
       const formBody = new FormData();
@@ -1024,21 +1049,34 @@ const useUpdateFile = () => {
       if (!linkId || !file)
         throw new Error("Error generating preview: Invalid parameters");
 
-      formBody.append("file", file);
+      formBody.append("file", file as any);
 
       const res = await fetch(
-        `/api/v1/archives/${linkId}?format=` +
+        (auth?.instance ? auth?.instance : "") +
+          `/api/v1/archives/${linkId}?format=` +
           format +
           (isPreview ? "&preview=true" : ""),
         {
           body: formBody,
           method: "POST",
+          headers: {
+            ...(auth?.session
+              ? { Authorization: `Bearer ${auth.session}` }
+              : {}),
+          },
         }
       );
 
-      const data = res.json();
+      const data = await res.json();
 
-      return data;
+      if (!res.ok) throw new Error(data.response);
+
+      return data.response;
+    },
+    onError: (error) => {
+      if (toast && t) toast.error(t(error.message));
+      else if (Alert)
+        Alert.alert("Error", "There was an error uploading the file.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["links"] });
@@ -1090,6 +1128,44 @@ const useBulkEditLinks = () => {
   });
 };
 
+const useUpdateArchive = ({
+  auth,
+  onAfterSuccess,
+}: {
+  auth?: MobileAuth;
+  onAfterSuccess?: (linkId: number) => void | Promise<void>;
+} = {}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (linkId: number) => {
+      const response = await fetch(
+        (auth?.instance ?? "") + `/api/v1/links/${linkId}/archive`,
+        {
+          method: "PUT",
+          headers: auth?.session
+            ? { Authorization: `Bearer ${auth.session}` }
+            : undefined,
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok)
+        throw new Error(
+          data?.response || "Failed to refresh preserved formats."
+        );
+
+      return linkId;
+    },
+    onSuccess: async (linkId) => {
+      await onAfterSuccess?.(linkId);
+      queryClient.invalidateQueries({ queryKey: ["link", linkId] });
+      queryClient.invalidateQueries({ queryKey: ["links"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardData"] });
+    },
+  });
+};
+
 const useArchiveAction = () => {
   const queryClient = useQueryClient();
 
@@ -1127,5 +1203,6 @@ export {
   useGetLink,
   useBulkEditLinks,
   useArchiveAction,
+  useUpdateArchive,
   useUpdateFile,
 };
