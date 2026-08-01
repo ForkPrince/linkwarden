@@ -26,37 +26,52 @@ export default function IncomingScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [link, setLink] = useState<LinkIncludingShortenedCollectionAndTags>();
 
-  const submittedRef = useRef(false);
+  const submittedUrlRef = useRef<string>("");
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    if (auth.status === "authenticated" && data.shareIntent.url && !submittedRef.current) {
-      submittedRef.current = true;
-      addLink.mutate(
-        {
-          url: data.shareIntent.url,
-          collection: { id: data.preferredCollection?.id },
+    return () => clearTimeout(successTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (auth.status !== "authenticated") return;
+
+    const url = data.shareIntent.url;
+    if (!url || url === submittedUrlRef.current) return;
+
+    submittedUrlRef.current = url;
+    setShowSuccess(false);
+
+    addLink.mutate(
+      {
+        url,
+        collection: { id: data.preferredCollection?.id },
+      },
+      {
+        onSuccess: (e) => {
+          const savedUrl = url;
+          setLink(e as unknown as LinkIncludingShortenedCollectionAndTags);
+          setShowSuccess(true);
+          successTimerRef.current = setTimeout(() => {
+            if (useDataStore.getState().data.shareIntent.url !== savedUrl) {
+              return;
+            }
+            updateData({
+              shareIntent: {
+                hasShareIntent: false,
+                url: "",
+              },
+            });
+            router.replace("/dashboard");
+          }, 600);
         },
-        {
-          onSuccess: (e) => {
-            setLink(e as unknown as LinkIncludingShortenedCollectionAndTags);
-            setShowSuccess(true);
-            setTimeout(() => {
-              updateData({
-                shareIntent: {
-                  hasShareIntent: false,
-                  url: "",
-                },
-              });
-              router.replace("/dashboard");
-            }, 600);
-          },
-          onError: (error) => {
-            Alert.alert("Error", "There was an error adding the link.");
-            console.error("Error adding link:", error);
-          },
-        }
-      );
-    }
+        onError: (error) => {
+          submittedUrlRef.current = "";
+          Alert.alert("Error", "There was an error adding the link.");
+          console.error("Error adding link:", error);
+        },
+      }
+    );
   }, [auth.status, data.shareIntent.url]);
 
   if (auth.status === "unauthenticated") return <Redirect href="/" />;
