@@ -26,7 +26,7 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/maskable_logo.png",
       backgroundColor: "#ffffff",
     },
-    package: "app.linkwarden",
+    package: "com.forkprince.linkwarden",
   },
   web: {
     bundler: "metro",
