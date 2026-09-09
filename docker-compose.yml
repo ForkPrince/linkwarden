@@ -18,7 +18,7 @@ services:
     depends_on:
       - postgres
   # meilisearch:
-  #   image: getmeili/meilisearch:v1.12.8
+  #   image: getmeili/meilisearch:v1.13.3
   #   restart: always
   #   env_file:
   #     - .env

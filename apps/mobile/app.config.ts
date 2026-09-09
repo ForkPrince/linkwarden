@@ -3,7 +3,7 @@ import { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "Linkwarden",
   slug: "linkwarden",
-  version: "1.4.0",
+  version: "1.4.2",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "linkwarden",
@@ -89,6 +89,12 @@ const config: ExpoConfig = {
           buildToolsVersion: "36.0.0",
           usesCleartextTraffic: true,
         },
+        ios: {
+          extraPods: [
+            { name: "GoogleUtilities", modular_headers: true },
+            { name: "RecaptchaInterop", modular_headers: true },
+          ],
+        },
       },
     ],
     [
@@ -102,6 +108,7 @@ const config: ExpoConfig = {
     ],
     "./plugins/with-daynight-transparent-nav",
     "./plugins/with-network-security-config",
+    "./plugins/with-gradle-memory",
     "expo-font",
     "expo-web-browser",
     "expo-apple-authentication",

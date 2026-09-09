@@ -1,13 +1,14 @@
 # ==============================================================================
 # Stage 1: Monolith Builder
 # ==============================================================================
-FROM docker.io/rust:1.96-bullseye AS monolith-builder
-RUN set -eux && cargo install --locked monolith
+FROM docker.io/rust:1.96-bookworm AS monolith-builder
+ARG MONOLITH_VERSION=2.10.1
+RUN set -eux && cargo install --locked monolith@${MONOLITH_VERSION}
 
 # ==============================================================================
 # Stage 2: App Builder (Where the heavy building happens)
 # ==============================================================================
-FROM node:22.23-bullseye-slim AS app-builder
+FROM node:22.23-bookworm-slim AS app-builder
 
 ENV YARN_HTTP_TIMEOUT=10000000
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -46,7 +47,7 @@ RUN yarn workspaces focus --production linkwarden @linkwarden/web @linkwarden/wo
 # ==============================================================================
 # Stage 3: Final Runtime (This stage will be ~400MB total)
 # ==============================================================================
-FROM node:22.23-bullseye-slim AS main-app
+FROM node:22.23-bookworm-slim AS main-app
 ENV NODE_ENV=production
 ENV PRISMA_HIDE_UPDATE_MESSAGE=1
 # Stable, copyable browser location shared by install and runtime
@@ -82,6 +83,10 @@ RUN set -eux && \
     playwright install --with-deps chromium-headless-shell && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Next.js writes its image-optimizer cache here at runtime; precreate it as
+# world-writable so it also works when the container runs as a non-root user
+RUN mkdir -p apps/web/.next/cache && chmod 777 apps/web/.next/cache
 
 HEALTHCHECK --interval=30s \
             --timeout=5s \

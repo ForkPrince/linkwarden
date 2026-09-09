@@ -20,13 +20,14 @@
     "prisma:dev": "dotenv -- yarn workspace @linkwarden/prisma dev",
     "prisma:generate": "yarn workspace @linkwarden/prisma generate",
     "prisma:studio": "yarn workspace @linkwarden/prisma studio",
+    "docker:build": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
     "format": "yarn workspaces run format",
     "test": "vitest",
     "coverage": "vitest run --coverage",
     "postinstall": "yarn workspace @linkwarden/web run postinstall && patch-package"
   },
   "devDependencies": {
-    "vitest": "^4.0.17"
+    "vitest": "^4.1.0"
   },
   "dependencies": {
     "concurrently": "^9.1.2",
@@ -35,8 +36,6 @@
   },
   "resolutions": {
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-native-mmkv": "4.1.2",
-    "react-native-nitro-modules": "0.34.1"
+    "react-dom": "19.1.0"
   }
 }
